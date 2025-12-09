@@ -1,15 +1,15 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Object {
-    pub name: usize,
-    /// 物体在 x 轴方向的长度（原来的 length）
+    pub name: String,
+    /// 物体在 x 轴方向的长度（原 length）
     pub x: usize,
-    /// 物体在 y 轴方向的长度（原来的 width）
+    /// 物体在 y 轴方向的长度（原 width）
     pub y: usize,
-    /// 物体在 z 轴方向的长度（原来的 height）
+    /// 物体在 z 轴方向的长度（原 height）
     pub z: usize,
     pub value: usize,
 }
@@ -27,9 +27,9 @@ struct Solve {
     objects: Vec<Object>,
     // DFS 搜索顺序：按价值从大到小排列的物体索引
     order: Vec<usize>,
-    // 后缀价值和suffix_values[pos] = 从 pos 开始还能拿到的最大剩余价值上界
+    // 后缀价值和：suffix_values[pos] = 从 pos 开始理论可获得的最大剩余价值上界
     suffix_values: Vec<usize>,
-    // [x][y][z]，每个格子存 Option<usize>，表示第几个物体
+    // [x][y][z]，每个格子存 Option<usize>，表示第几个物体（原始 objects 的下标）
     global_best_solution: Vec<Vec<Vec<Option<usize>>>>,
     global_best_select_objects: Vec<Object>,
     global_best_cost: usize,
@@ -49,9 +49,7 @@ impl Solve {
         let mut order: Vec<usize> = (0..n).collect();
 
         // 2) 按价值从大到小排序（价值高的优先）
-        order.sort_by(|&i, &j| {
-            objects[j].value.cmp(&objects[i].value)
-        });
+        order.sort_by(|&i, &j| objects[j].value.cmp(&objects[i].value));
 
         // 3) 预计算后缀最大剩余价值，用于剪枝
         // suffix_values[pos] = sum_{k=pos..n-1} value(order[k])
@@ -77,13 +75,12 @@ impl Solve {
 
     /// 回溯搜索：按照 order_pos 对应的顺序尝试装物体
     fn dfs(&mut self, order_pos: usize, prev_cost: usize) {
-        // 剪枝 1：基于剩余价值的上界
-        // 即使把后面所有物体都装上，理论最大值也到不了当前最优，直接剪枝
+        // 剪枝：即使把后面所有物体都装上，理论最大也比不过当前全局最优
         if prev_cost + self.suffix_values[order_pos] <= self.global_best_cost {
             return;
         }
 
-        // 1. 触底：所有物体都处理完了
+        // 触底：所有物体都处理完了
         if order_pos == self.order.len() {
             if prev_cost > self.global_best_cost {
                 self.global_best_cost = prev_cost;
@@ -93,7 +90,7 @@ impl Solve {
             return;
         }
 
-        // 当前要决策的物体索引
+        // 当前要决策的物体索引（原始 objects 的下标）
         let object_index = self.order[order_pos];
 
         let (obj_x, obj_y, obj_z, obj_val) = {
@@ -101,13 +98,11 @@ impl Solve {
             (obj.x, obj.y, obj.z, obj.value)
         };
 
-        // 分支一：不装当前物体（无论怎样都可以选这条）
+        // 分支一：不装当前物体
         self.dfs(order_pos + 1, prev_cost);
 
-        if obj_x > self.limit.x
-            || obj_y > self.limit.y
-            || obj_z > self.limit.z
-        {
+        // 尺寸超过限制，直接放弃“尝试装”的分支
+        if obj_x > self.limit.x || obj_y > self.limit.y || obj_z > self.limit.z {
             return;
         }
 
@@ -126,10 +121,10 @@ impl Solve {
                         self.place(object_index, x, y, z);
                         self.current_selected_objects.push(obj_clone);
 
-                        // 递归处理下一个物体
+                        // 递归
                         self.dfs(order_pos + 1, prev_cost + obj_val);
 
-                        // 撤销本次选择
+                        // 回溯
                         self.current_selected_objects.pop();
                         self.remove(object_index, x, y, z);
                     }
@@ -139,12 +134,7 @@ impl Solve {
     }
 
     /// 检查从 (x, y, z) 开始，第 index 个 object 这块体积是否都为空
-    fn can_place_object(&self,
-                        object_index: usize,
-                        start_x: usize,
-                        start_y: usize,
-                        start_z: usize,
-    ) -> bool {
+    fn can_place_object(&self, object_index: usize, start_x: usize, start_y: usize, start_z: usize) -> bool {
         let obj = &self.objects[object_index];
 
         // 避免越界
@@ -168,12 +158,7 @@ impl Solve {
     }
 
     /// 把第 object_index 个物体放到 (start_x, start_y, start_z)
-    fn place(&mut self,
-             object_index: usize,
-             start_x: usize,
-             start_y: usize,
-             start_z: usize,
-    ) {
+    fn place(&mut self, object_index: usize, start_x: usize, start_y: usize, start_z: usize) {
         let obj = &self.objects[object_index];
         for i in start_x..start_x + obj.x {
             for j in start_y..start_y + obj.y {
@@ -185,12 +170,7 @@ impl Solve {
     }
 
     /// 把第 object_index 个物体从 (start_x, start_y, start_z) 移除
-    fn remove(&mut self,
-              object_index: usize,
-              start_x: usize,
-              start_y: usize,
-              start_z: usize,
-    ) {
+    fn remove(&mut self, object_index: usize, start_x: usize, start_y: usize, start_z: usize) {
         let obj = &self.objects[object_index];
         for i in start_x..start_x + obj.x {
             for j in start_y..start_y + obj.y {
@@ -202,32 +182,15 @@ impl Solve {
     }
 }
 
-// 将 x/y/z 的填充方案转换为 (l, w, h) 三维数组
-fn to_grid_zxy(
-    limit: &Limit,
-    solution: &Vec<Vec<Vec<Option<usize>>>>,
-) -> Vec<Vec<Vec<isize>>> {
-    // grid[z][x][y]
-    let mut grid = vec![vec![vec![-1isize; limit.y]; limit.x]; limit.z];
-
-    for x in 0..limit.x {
-        for y in 0..limit.y {
-            for z in 0..limit.z {
-                if let Some(idx) = solution[x][y][z] {
-                    grid[z][x][y] = idx as isize;
-                }
-            }
-        }
-    }
-
-    grid
-}
-
-
+/// 求解并返回：
+/// - names: Vec<String>  —— 参与摆放的物体名称数组
+/// - grid_zxy: [z][x][y] —— -1 表示空；>=0 表示 names 的索引
+/// - selected: Vec<Object> —— 最优解中选中的物体（含字符串 name）
+/// - best: usize —— 最优价值
 fn solve_to_grid_zxy(
     limit: Limit,
     objects: Vec<Object>,
-) -> (Vec<usize>, Vec<Vec<Vec<isize>>>, Vec<Object>, usize) {
+) -> (Vec<String>, Vec<Vec<Vec<isize>>>, Vec<Object>, usize) {
     let mut solver = Solve::new(limit, objects);
     solver.dfs(0, 0);
 
@@ -235,10 +198,7 @@ fn solve_to_grid_zxy(
     let w = solver.limit.y; // y
     let h = solver.limit.z; // z
 
-    // 1. 生成 grid_zxy
-    let grid_zxy = to_grid_zxy(&solver.limit, &solver.global_best_solution);
-
-    // 2. 生成 names
+    // 1) 统计在解中实际被使用到的物体“原始索引”，按升序（稳定）
     let mut used_indices = BTreeSet::new();
     for x in 0..l {
         for y in 0..w {
@@ -250,42 +210,56 @@ fn solve_to_grid_zxy(
         }
     }
 
-    let names: Vec<usize> = used_indices
+    // 2) 生成名称数组（与 used_indices 的顺序一致）
+    let names: Vec<String> = used_indices
         .iter()
-        .map(|&idx| solver.objects[idx].name)
+        .map(|&idx| solver.objects[idx].name.clone())
         .collect();
 
-    // 3. 按 name -> Object 映射 前端展示
-    let mut obj_map: HashMap<usize, Object> = HashMap::new();
-    for obj in &solver.global_best_select_objects {
-        obj_map.insert(obj.name, obj.clone());
+    // 3) 建立 “原始物体索引 idx -> names 中的位置 pos（i32）” 的映射
+    let mut idx_to_pos: Vec<i32> = vec![-1; solver.objects.len()];
+    for (pos, &idx) in used_indices.iter().enumerate() {
+        idx_to_pos[idx] = pos as i32;
     }
-    let mut selected: Vec<Object> = Vec::new();
-    for &name in &names {
-        if let Some(obj) = obj_map.get(&name) {
-            selected.push(obj.clone());
+
+    // 4) 构建 [z][x][y] 的栅格：空=-1，非空=names 的索引
+    let mut grid_zxy = vec![vec![vec![-1isize; w]; l]; h];
+    for x in 0..l {
+        for y in 0..w {
+            for z in 0..h {
+                if let Some(idx) = solver.global_best_solution[x][y][z] {
+                    let pos = idx_to_pos[idx];
+                    grid_zxy[z][x][y] = pos as isize; // -1 或 >=0
+                }
+            }
         }
     }
 
-    (names, grid_zxy, selected, solver.global_best_cost)
+    // 5) 选中的物体列表与最优价值
+    let selected = solver.global_best_select_objects.clone();
+    let best = solver.global_best_cost;
+
+    (names, grid_zxy, selected, best)
 }
 
 #[derive(Serialize)]
 pub struct SolveOutput {
-    pub names: Vec<usize>,
-    pub grid_zxy: Vec<Vec<Vec<i32>>>,
-    pub selected: Vec<Object>,
-    pub best: usize,
+    pub names: Vec<String>,                // 字符串名称数组
+    pub grid_zxy: Vec<Vec<Vec<i32>>>,      // [z][x][y]；空=-1；非空=names 索引
+    pub selected: Vec<Object>,             // 最优解中选中的物体
+    pub best: usize,                       // 最优价值
 }
 
 #[wasm_bindgen]
 pub fn solve_to_grid_zxy_js(limit: JsValue, objects: JsValue) -> Result<JsValue, JsValue> {
-    // 反序列化前端传入参数
+    // 反序列化前端传入参数（字段名需与 Limit/Object 定义一致）
     let limit: Limit = serde_wasm_bindgen::from_value(limit)?;
     let objects: Vec<Object> = serde_wasm_bindgen::from_value(objects)?;
 
+    // 调用内部求解
     let (names, grid_isize, selected, best) = solve_to_grid_zxy(limit, objects);
 
+    // isize -> i32（WASM/JS 更友好）
     let grid_zxy: Vec<Vec<Vec<i32>>> = grid_isize
         .into_iter()
         .map(|plane| {
@@ -302,5 +276,6 @@ pub fn solve_to_grid_zxy_js(limit: JsValue, objects: JsValue) -> Result<JsValue,
         selected,
         best,
     };
+
     Ok(serde_wasm_bindgen::to_value(&out)?)
 }
