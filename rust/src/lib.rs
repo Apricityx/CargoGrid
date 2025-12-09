@@ -2,27 +2,34 @@ use std::collections::{BTreeSet, HashMap};
 use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 
-// ===== 你原有的结构体 =====
+// ===== 结构体：全部改为 x / y / z =====
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Object {
     pub name: usize,
-    pub width: usize,
-    pub length: usize,
-    pub height: usize,
+    /// 物体在 x 轴方向的长度（原来的 length）
+    pub x: usize,
+    /// 物体在 y 轴方向的长度（原来的 width）
+    pub y: usize,
+    /// 物体在 z 轴方向的长度（原来的 height）
+    pub z: usize,
     pub value: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Limit {
-    pub width: usize,
-    pub length: usize,
-    pub height: usize,
+    /// 总空间在 x 轴的尺寸（原来的 length）
+    pub x: usize,
+    /// 总空间在 y 轴的尺寸（原来的 width）
+    pub y: usize,
+    /// 总空间在 z 轴的尺寸（原来的 height）
+    pub z: usize,
 }
 
 struct Solve {
     limit: Limit,
     objects: Vec<Object>,
-    // [length][width][height]，每个格子存 Option<usize>，表示第几个物体
+    // [x][y][z]，每个格子存 Option<usize>，表示第几个物体
     global_best_solution: Vec<Vec<Vec<Option<usize>>>>,
     global_best_select_objects: Vec<Object>,
     global_best_cost: usize,
@@ -32,9 +39,9 @@ struct Solve {
 
 impl Solve {
     fn new(limit: Limit, objects: Vec<Object>) -> Self {
-        let l = limit.length;
-        let w = limit.width;
-        let h = limit.height;
+        let l = limit.x;
+        let w = limit.y;
+        let h = limit.z;
 
         let empty = vec![vec![vec![None; h]; w]; l];
         Solve {
@@ -62,28 +69,27 @@ impl Solve {
 
         let object_index = current_object_index;
 
-        // 先把要用到的字段拷出来
-        let (obj_len, obj_w, obj_h, obj_val) = {
+        // 先把要用到的字段拷出来（x/y/z 分别是三个方向的尺寸）
+        let (obj_x, obj_y, obj_z, obj_val) = {
             let obj = &self.objects[object_index];
-            (obj.length, obj.width, obj.height, obj.value)
+            (obj.x, obj.y, obj.z, obj.value)
         };
 
         // 分支一：不装当前物体（无论怎样都可以选这条）
         self.dfs(current_object_index + 1, prev_cost);
 
-        // ⭐ 关键：如果物体本身在某一维就比箱子大，根本不可能装进去，
-        //    直接 return，别去算 max_x / max_y / max_z 了。
-        if obj_len > self.limit.length
-            || obj_w > self.limit.width
-            || obj_h > self.limit.height
+        // ⭐ 如果物体在某一维比箱子大，根本不可能装进去
+        if obj_x > self.limit.x
+            || obj_y > self.limit.y
+            || obj_z > self.limit.z
         {
             return;
         }
 
         // 分支二：尝试装当前物体（枚举所有可行位置）
-        let max_x = self.limit.length - obj_len + 1;
-        let max_y = self.limit.width - obj_w + 1;
-        let max_z = self.limit.height - obj_h + 1;
+        let max_x = self.limit.x - obj_x + 1;
+        let max_y = self.limit.y - obj_y + 1;
+        let max_z = self.limit.z - obj_z + 1;
 
         for x in 0..max_x {
             for y in 0..max_y {
@@ -110,10 +116,10 @@ impl Solve {
     /// 检查从 (x, y, z) 开始，第 index 个 object 这块体积是否都为空
     fn can_place_object(&self, object_index: usize, x: usize, y: usize, z: usize) -> bool {
         let object = &self.objects[object_index];
-        for dx in 0..object.length {
-            for dy in 0..object.width {
-                for dz in 0..object.height {
-                    // 注意：这里假设 current_solution: [length][width][height]
+        for dx in 0..object.x {
+            for dy in 0..object.y {
+                for dz in 0..object.z {
+                    // current_solution: [x][y][z]
                     if self.current_solution[x + dx][y + dy][z + dz].is_some() {
                         return false;
                     }
@@ -126,9 +132,9 @@ impl Solve {
     /// 真正把 index 对应的 object 放进 current_solution 里
     fn place(&mut self, object_index: usize, x: usize, y: usize, z: usize) {
         let object = &self.objects[object_index];
-        for dx in 0..object.length {
-            for dy in 0..object.width {
-                for dz in 0..object.height {
+        for dx in 0..object.x {
+            for dy in 0..object.y {
+                for dz in 0..object.z {
                     self.current_solution[x + dx][y + dy][z + dz] = Some(object_index);
                 }
             }
@@ -138,9 +144,9 @@ impl Solve {
     /// 把刚刚放进去的 index 对应 object 撤销（对应 place 的反操作）
     fn remove(&mut self, object_index: usize, x: usize, y: usize, z: usize) {
         let object = &self.objects[object_index];
-        for dx in 0..object.length {
-            for dy in 0..object.width {
-                for dz in 0..object.height {
+        for dx in 0..object.x {
+            for dy in 0..object.y {
+                for dz in 0..object.z {
                     self.current_solution[x + dx][y + dy][z + dz] = None;
                 }
             }
@@ -161,9 +167,9 @@ pub fn solve_to_grid_zxy(
     let mut solver = Solve::new(limit, objects);
     solver.dfs(0, 0);
 
-    let l = solver.limit.length; // x
-    let w = solver.limit.width;  // y
-    let h = solver.limit.height; // z
+    let l = solver.limit.x; // x
+    let w = solver.limit.y; // y
+    let h = solver.limit.z; // z
 
     // 1) 找到最优解中实际用到的 object 索引，并做稳定排序
     let mut used_indices = BTreeSet::new(); // 自动升序
@@ -212,10 +218,11 @@ pub fn solve_to_grid_zxy(
 }
 
 // ===== JS 友好包装：把输入/输出通过 JsValue（serde）传给前端 =====
+
 #[derive(Serialize, Deserialize)]
 pub struct SolveOutput {
     pub names: Vec<usize>,
-    pub grid_zxy: Vec<Vec<Vec<i32>>>, // 用 i32，避免 JS 与 isize 的差异
+    pub grid_zxy: Vec<Vec<Vec<i32>>>,
     pub selected: Vec<Object>,
     pub best: usize,
 }
@@ -226,10 +233,8 @@ pub fn solve_to_grid_zxy_js(limit: JsValue, objects: JsValue) -> Result<JsValue,
     let limit: Limit = serde_wasm_bindgen::from_value(limit)?;
     let objects: Vec<Object> = serde_wasm_bindgen::from_value(objects)?;
 
-    // 调用你真正的算法
     let (names, grid_isize, selected, best) = solve_to_grid_zxy(limit, objects);
 
-    // 转 i32（-1 保留）
     let grid_zxy: Vec<Vec<Vec<i32>>> = grid_isize
         .into_iter()
         .map(|plane| {
@@ -240,7 +245,6 @@ pub fn solve_to_grid_zxy_js(limit: JsValue, objects: JsValue) -> Result<JsValue,
         })
         .collect();
 
-    // 序列化回前端
     let out = SolveOutput {
         names,
         grid_zxy,

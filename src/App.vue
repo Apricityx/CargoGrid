@@ -5,57 +5,54 @@
           v-for="(layer, index) in objectCollection"
           :key="index"
           v-model="checkedLayers[index]"
-          :label="`Layer ${index}`"
+          :label="`Layer z = ${index}`"
       />
     </div>
 
     <div class="right">
-      <RenderScene :objectCollection="displayedObjectCollection"/>
+      <RenderScene :objectCollection="displayedObjectCollection" :limit="limit" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {ref, computed, onMounted} from 'vue'
+import { ref, computed, onMounted, Ref, watch } from 'vue'
 import RenderScene from './components/RenderScene.vue'
 import init, { solve_to_grid_zxy_js } from 'packing_solver'
 import wasmUrl from 'packing_solver/index_bg.wasm?url'
-type Limit = { length: number; width: number; height: number }
-type Obj   = { name: number; length: number; width: number; height: number; value: number }
-const objectCollection = ref<number[][][]>([
-  [
-    [-1, -1, -1],
-    [2, 0, 3],
-    [0, 0, 0],
-    [0, 0, 0]
-  ],
-  [
-    [4, 0, 5],
-    [0, 6, 0],
-    [7, 0, 8],
-    [1, 1, 1]
-  ],
-  [
-    [0, 9, 0],
-    [10, 0, 11],
-    [0, 0, 0],
-    [1, 2, 0]
-  ]
-])
-onMounted(async () => {
-  await init(wasmUrl) // 显式传入 URL，避免 ESM-integration
-  const limit: Limit = { length: 4, width: 3, height: 3 }
-  const objects: Obj[] = [
-    { name: 101, length: 2, width: 2, height: 1, value: 6 },
-    { name: 202, length: 1, width: 3, height: 1, value: 5 },
-    { name: 303, length: 1, width: 2, height: 2, value: 7 },
-    { name: 404, length: 2, width: 1, height: 1, value: 3 },
-  ]
 
-  // 直接把 JS 对象传进去，得到普通 JS 对象返回
-  const result = solve_to_grid_zxy_js(limit, objects) as {
+// Rust: struct Limit { x, y, z }
+export type Limit = { x: number; y: number; z: number }
+
+// Rust: struct Object { name, x, y, z, value }
+type Obj = { name: number; x: number; y: number; z: number; value: number }
+
+// Rust 返回的 grid_zxy: [z][x][y]，空位=-1
+const objectCollection = ref<number[][][]>([
+  // 初始随便给个 1 层 1x1 占位，后面会被 wasm 结果覆盖
+  [[1]],
+])
+
+// 初始化Limit
+const limit: Ref<Limit> = ref({ x: 5, y: 5, z: 5 })
+
+const objects: Ref<Obj[]> = ref([
+  { name: 1, x: 2, y: 2, z: 1, value: 6 },
+  { name: 2, x: 1, y: 3, z: 1, value: 5 },
+  { name: 3, x: 1, y: 2, z: 2, value: 7 },
+  { name: 4, x: 2, y: 2, z: 3, value: 10000 },
+  { name: 6, x: 3, y: 2, z: 2, value: 10000 },
+])
+
+onMounted(async () => {
+  await init(wasmUrl)
+
+  // Rust Limit
+  limit.value = { x: 4, y: 4, z: 3 }
+
+  const result = solve_to_grid_zxy_js(limit.value, objects.value) as {
     names: number[]
-    grid_zxy: number[][][]  // [z][x][y]，空位=-1
+    grid_zxy: number[][][] // [z][x][y]，空位=-1
     selected: Obj[]
     best: number
   }
@@ -63,15 +60,24 @@ onMounted(async () => {
   console.log('names:', result.names)
   console.log('best:', result.best)
   console.log('grid_zxy:', result.grid_zxy)
-  // 例如：根据 grid_zxy 渲染 three.js 体素……
+
+  objectCollection.value = result.grid_zxy
 })
-// objectCollection[layer][row][col]  -> 每个元素是一张 XY 平面，沿着“层”(高度) 叠起来
 
+// 每一层 z 的勾选状态
+const checkedLayers = ref<boolean[]>([])
 
-// 每一层的勾选状态
-const checkedLayers = ref<boolean[]>(objectCollection.value.map(() => true))
+// 层数变 checkedLayers 跟着调整
+watch(
+    objectCollection,
+    (val) => {
+      // 保留已有勾选状态，不够的补 true
+      checkedLayers.value = val.map((_, idx) => checkedLayers.value[idx] ?? true)
+    },
+    { immediate: true }
+)
 
-// 取消勾选的层 -> 变成全 0
+// 取消勾选的层 该层整层置为 -1 表示不渲染
 const displayedObjectCollection = computed(() =>
     objectCollection.value.map((layer, index) => {
       if (checkedLayers.value[index]) return layer
@@ -81,7 +87,9 @@ const displayedObjectCollection = computed(() =>
 </script>
 
 <style>
-html, body, #app {
+html,
+body,
+#app {
   margin: 0;
   padding: 0;
   height: 100%;

@@ -1,11 +1,11 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu, globalShortcut } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
+Menu.setApplicationMenu(null)
 // The built directory structure
 //
 // ├─┬─┬ dist
@@ -65,4 +65,13 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(()=>{
+    globalShortcut.register('F12', () => {
+        if (!win) return
+        const wc = win.webContents
+        if (wc.isDevToolsOpened()) wc.closeDevTools()
+        else wc.openDevTools({ mode: 'detach' })
+    })
+    createWindow()
+    win?.webContents.openDevTools()
+})

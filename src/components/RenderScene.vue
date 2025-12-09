@@ -6,13 +6,12 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import type { Limit } from '../App.vue'
 
-// objectCollection[layer][row][col]
-// layer: 高度方向的一层
-// row:   平面里的 y 索引
-// col:   平面里的 x 索引
+// objectCollection: [z][x][y]，空位 = -1
 const props = defineProps<{
   objectCollection: number[][][]
+  limit: Limit      // { x, y, z }
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -25,6 +24,7 @@ let animationId = 0
 
 let voxelGroup: THREE.Group | null = null
 let gridHelper: THREE.Box3Helper | null = null
+let axisGroup: THREE.Group | null = null
 
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1)
 const materialCache = new Map<number, THREE.MeshStandardMaterial>()
@@ -42,10 +42,45 @@ function getMaterialForValue(value: number) {
   return m
 }
 
+// 文字 Sprite 标注 X/Y/Z
+function createTextSprite(text: string, color = '#000000'): THREE.Sprite {
+  const canvas = document.createElement('canvas')
+  const size = 256
+  canvas.width = size
+  canvas.height = size
+
+  const ctx = canvas.getContext('2d')!
+  ctx.clearRect(0, 0, size, size)
+  ctx.fillStyle = color
+  ctx.font = 'bold 80px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, size / 2, size / 2)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+  })
+
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(1.2, 1.2, 1.2)
+  return sprite
+}
+
+function getLimitCenter(limit: Limit) {
+  return new THREE.Vector3(
+      limit.x / 2,
+      limit.z / 2, // 高度
+      limit.y / 2,
+  )
+}
+
 /**
  * 根据 collection 重建体素
+ * collection: [z][x][y]
  */
-function buildVoxels(collection: number[][][], fitCamera = false) {
+function buildVoxels(collection: number[][][], limit: Limit, fitCamera = false) {
   if (!scene) return
 
   if (voxelGroup) {
@@ -56,26 +91,34 @@ function buildVoxels(collection: number[][][], fitCamera = false) {
     scene.remove(gridHelper)
     gridHelper = null
   }
+  if (axisGroup) {
+    scene.remove(axisGroup)
+    axisGroup = null
+  }
 
-  const NZ = collection.length
+  const NZ = collection.length      // z 高度层数
   if (NZ === 0) return
 
-  const NY = collection[0]?.length ?? 0
-  const NX = collection[0]?.[0]?.length ?? 0
-  if (NY === 0 || NX === 0) return
+  const NX = collection[0]?.length ?? 0      // x
+  const NY = collection[0]?.[0]?.length ?? 0 // y
+  if (NX === 0 || NY === 0) return
 
   voxelGroup = new THREE.Group()
 
-  // 映射：col -> X, layer -> Y(高度), row -> Z
-  for (let layer = 0; layer < NZ; layer++) {
-    for (let row = 0; row < NY; row++) {
-      for (let col = 0; col < NX; col++) {
-        const v = collection[layer][row][col]
+  // 映射：
+  //   xIndex -> Three X
+  //   zIndex -> Three Y
+  //   yIndex -> Three Z
+  for (let zIndex = 0; zIndex < NZ; zIndex++) {
+    for (let xIndex = 0; xIndex < NX; xIndex++) {
+      for (let yIndex = 0; yIndex < NY; yIndex++) {
+        const v = collection[zIndex][xIndex][yIndex]
         if (v <= -1) continue
 
         const material = getMaterialForValue(v)
         const cube = new THREE.Mesh(boxGeometry, material)
-        cube.position.set(col, layer, row)
+        // 放在每个格子的中心
+        cube.position.set(xIndex + 0.5, zIndex + 0.5, yIndex + 0.5)
         voxelGroup.add(cube)
       }
     }
@@ -83,17 +126,71 @@ function buildVoxels(collection: number[][][], fitCamera = false) {
 
   scene.add(voxelGroup)
 
-  // 边框
-  const min = new THREE.Vector3(-0.5, -0.5, -0.5)
-  const max = new THREE.Vector3(NX - 0.5, NZ - 0.5, NY - 0.5)
+  // ====== Limit 边框 Box3（[0, x] × [0, z] × [0, y]）======
+  const min = new THREE.Vector3(0, 0, 0)
+  const max = new THREE.Vector3(
+      limit.x,
+      limit.z,
+      limit.y
+  )
   const gridBox = new THREE.Box3(min, max)
   gridHelper = new THREE.Box3Helper(gridBox, 0x333333)
   scene.add(gridHelper)
 
+  /**
+   * 画坐标轴
+   * 值得注意的是，Three.js中的y代表高度
+   */
+  axisGroup = new THREE.Group()
+  // 坐标轴原点
+  const origin = new THREE.Vector3(-0.01, -0.01, -0.01)
+  const x_length = limit.x + 2
+  const y_length = limit.y + 2
+  const z_length = limit.z + 2
+
+  // 坐标轴箭头
+  const xArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(1, 0, 0),
+      origin,
+      x_length,
+      0xff0000
+  )
+  const yArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      origin,
+      z_length,
+      0x0000ff
+  )
+  const zArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1),
+      origin,
+      y_length,
+      0x00ff00
+  )
+
+  // Label
+  const xLabel = createTextSprite('X', '#ff0000')
+  xLabel.position.set(x_length + 0.4, 0, 0)
+  const yLabel = createTextSprite('Y', '#00ff00')
+  yLabel.position.set(0, 0, y_length + 0.4)
+  const zLabel = createTextSprite('Z', '#0000ff')
+  zLabel.position.set(0, z_length + 0.4, 0)
+
+  axisGroup.add(xArrow)
+  axisGroup.add(yArrow)
+  axisGroup.add(zArrow)
+  axisGroup.add(xLabel)
+  axisGroup.add(yLabel)
+  axisGroup.add(zLabel)
+
+  scene.add(axisGroup)
+
+  /**
+   * 相机用 Limit 框的中心
+   */
   if (fitCamera && camera) {
-    const box = new THREE.Box3().setFromObject(voxelGroup)
-    const center = box.getCenter(new THREE.Vector3())
-    const size = box.getSize(new THREE.Vector3())
+    const center = getLimitCenter(limit)
+    const size = gridBox.getSize(new THREE.Vector3())
     const maxDim = Math.max(size.x, size.y, size.z || 1)
 
     const fitHeightDistance =
@@ -133,18 +230,15 @@ function initScene() {
   dir.position.set(5, 8, 10)
   scene.add(dir)
 
-  buildVoxels(props.objectCollection, true)
+  buildVoxels(props.objectCollection, props.limit, true)
 
   controls = new OrbitControls(camera, renderer.domElement)
   controls.enablePan = false
   controls.autoRotate = true
   controls.autoRotateSpeed = 1
 
-  if (voxelGroup) {
-    const box = new THREE.Box3().setFromObject(voxelGroup)
-    const center = box.getCenter(new THREE.Vector3())
-    controls.target.copy(center)
-  }
+  const center = getLimitCenter(props.limit)
+  controls.target.copy(center)
   controls.update()
 
   const animate = () => {
@@ -175,7 +269,24 @@ watch(
     () => props.objectCollection,
     (newVal) => {
       if (!scene) return
-      buildVoxels(newVal, false) // 更新体素，不动相机角度
+      // 只更新体素 不改相机旋转中心
+      buildVoxels(newVal, props.limit, false)
+    },
+    { deep: true }
+)
+
+watch(
+    () => props.limit,
+    (newVal) => {
+      if (!scene) return
+      // Limit 改变 重新构建盒子 重新把中心调到新 Limit 框中心
+      buildVoxels(props.objectCollection, newVal, false)
+      if (camera && controls) {
+        const center = getLimitCenter(newVal)
+        camera.lookAt(center)
+        controls.target.copy(center)
+        controls.update()
+      }
     },
     { deep: true }
 )
@@ -200,6 +311,7 @@ onBeforeUnmount(() => {
   controls = null
   voxelGroup = null
   gridHelper = null
+  axisGroup = null
 })
 </script>
 

@@ -1,9 +1,10 @@
-import { app, BrowserWindow } from "electron";
+import { Menu, app, BrowserWindow, globalShortcut } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 createRequire(import.meta.url);
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
+Menu.setApplicationMenu(null);
 process.env.APP_ROOT = path.join(__dirname$1, "..");
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
@@ -37,7 +38,16 @@ app.on("activate", () => {
     createWindow();
   }
 });
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  globalShortcut.register("F12", () => {
+    if (!win) return;
+    const wc = win.webContents;
+    if (wc.isDevToolsOpened()) wc.closeDevTools();
+    else wc.openDevTools({ mode: "detach" });
+  });
+  createWindow();
+  win == null ? void 0 : win.webContents.openDevTools();
+});
 export {
   MAIN_DIST,
   RENDERER_DIST,
