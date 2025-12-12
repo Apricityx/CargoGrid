@@ -73,5 +73,8 @@ app.whenReady().then(()=>{
         else wc.openDevTools({ mode: 'detach' })
     })
     createWindow()
-    win?.webContents.openDevTools()
+    // 如果是开发环境，则打开开发者工具
+    if (!app.isPackaged) {
+        win?.webContents.openDevTools( )
+    }
 })

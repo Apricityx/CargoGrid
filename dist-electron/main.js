@@ -46,7 +46,9 @@ app.whenReady().then(() => {
     else wc.openDevTools({ mode: "detach" });
   });
   createWindow();
-  win == null ? void 0 : win.webContents.openDevTools();
+  if (!app.isPackaged) {
+    win == null ? void 0 : win.webContents.openDevTools();
+  }
 });
 export {
   MAIN_DIST,
