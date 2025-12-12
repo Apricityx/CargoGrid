@@ -3,25 +3,76 @@
     <!-- 左侧控制面板 -->
     <div class="left">
       <v-card class="d-flex flex-column" style="height: 100%;" elevation="3">
+
         <v-card-title
             class="text-subtitle-1 font-weight-bold d-flex align-center justify-space-between"
         >
           <span>控制面板</span>
-          <div class="d-flex align-center gap-2">
-            <v-chip size="small" color="primary" variant="flat">
-              {{ objectSolution.length }} 层
-            </v-chip>
-            <v-chip size="small" color="success" variant="flat" v-if="best > 0">
-              Best: {{ best }}
-            </v-chip>
-          </div>
+
         </v-card-title>
 
         <v-divider />
-<!--        空间限制-->
 
         <v-card-text class="flex-grow-1 overflow-y-auto" style="min-height: 0;">
+          <v-expansion-panels style="margin-bottom: 20px">
+            <v-expansion-panel
+                title="项目背景"
+            >
+              <v-expansion-panel-text>
+                <div style="text-align: left">
+                  <p>
+                    在现代国际物流与海运出口贸易中，海运运费高昂且舱位资源紧缺。对于出口企业而言，如何在有限的集装箱空间内装载总经济价值最高的货物，是提高利润率的关键环节。
+                  </p>
+                  <br/>
+                  <p>
+                    本软件提供了最佳集装箱装载计算与可视化系统，利用回溯算法，帮助企业在满足空间和重量限制的前提下，最大化集装箱内货物的总价值。
+                  </p>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+            <v-expansion-panel
+                title="数学模型"
+            >
+              <v-expansion-panel-text>
+                <div style="text-align: left">
+                  <p>
+                    将此问题简化并为一个数学模型，给定一个长方体集装箱，其长、宽、高确定。给定n种类型的待装货物，每种货物具有固定的长宽高以及特定的经济价值。
+                    系统需要确定一个装载方案，满足以下约束条件：
+                  </p>
+                  <v-list lines="two">
+                    <v-list-item
+                        title="几何约束"
+                        subtitle="所有被选中的货物必须完全位于集装箱内部，且任意两个货物在空间上互不重叠。"
+                    ></v-list-item>
+                    <v-list-item
+                        title="方向约束"
+                        subtitle="货物必须平行于集装箱的坐标轴放置，不能旋转。"
+                    ></v-list-item>
+                    <v-list-item
+                        title="目标函数"
+                        subtitle="在满足上述条件的前提下，最大化装入集装箱内货物的总价值。"
+                    ></v-list-item>
+                  </v-list>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+          <div class="section-title mb-2">最优解</div>
+          <div class="d-flex align-center justify-center gap-2 w-100%">
+            <v-chip  size="small" color="primary" variant="flat">
+              {{ objectSolution.length }} 层
+            </v-chip>
+            <v-chip size="small" color="success" variant="flat" v-if="best > 0">
+              最优价值: {{ best }}
+            </v-chip>
+
+            <v-chip size="small" color="primary" variant="flat" v-if="best > 0">
+              货物数量: {{ selected.length }}
+            </v-chip>
+          </div>
           <div class="section-title mb-2">空间限制</div>
+
+
           <v-row dense>
             <v-col cols="4">
               <v-text-field v-model.number="limit.x" label="X" type="number" min="1"
@@ -36,7 +87,6 @@
                             variant="outlined" density="compact" hide-details />
             </v-col>
           </v-row>
-          <v-divider />
           <div class="section-title mb-2">添加物体</div>
 
           <v-row dense>
@@ -65,7 +115,7 @@
           </v-row>
 
           <v-alert v-if="nameEmpty" type="error" variant="tonal" class="mt-2" density="compact">
-            名称不能为空。
+            名称不能为空
           </v-alert>
 
           <v-alert v-if="duplicateName" type="error" variant="tonal" class="mt-2" density="compact">
@@ -74,6 +124,10 @@
 
           <v-alert v-if="exceedsLimit" type="warning" variant="tonal" class="mt-2" density="compact">
             货物尺寸过大，超过当前空间限制
+          </v-alert>
+
+          <v-alert v-if="objects.length >= 10" type="error" variant="tonal" class="mt-2" density="compact">
+            物体数量已达上限，无法添加更多物体
           </v-alert>
 
           <div class="d-flex gap-2 mt-3">
@@ -92,13 +146,13 @@
           <v-table density="comfortable" class="objects-table">
             <thead>
             <tr>
-              <th style="width: 160px;">name</th>
+              <th style="width: 160px; text-align: center">商品名</th>
               <th>X</th>
               <th>Y</th>
               <th>Z</th>
-              <th>value</th>
-              <th style="width: 90px;">选择</th>
-              <th style="width: 70px;">操作</th>
+              <th style="width: 90px; text-align: center">价值</th>
+              <th style="width: 90px; text-align: center">选择</th>
+              <th style="width: 90px; text-align: center">操作</th>
             </tr>
             </thead>
             <tbody>
@@ -125,6 +179,7 @@
             </tr>
             </tbody>
           </v-table>
+          <v-divider/>
 <!--          可见图层-->
           <div class="section-title mb-2">可见图层</div>
           <v-sheet class="layers-sheet" rounded="lg" variant="outlined">
@@ -134,7 +189,7 @@
           </v-sheet>
         </v-card-text>
 
-        <v-divider />
+        <v-divider/>
       </v-card>
     </div>
     <!-- 右侧 Three.js 画布 -->
@@ -196,7 +251,8 @@ const canAdd = computed(
         Number.isFinite(newObj.value.x) && newObj.value.x > 0 &&
         Number.isFinite(newObj.value.y) && newObj.value.y > 0 &&
         Number.isFinite(newObj.value.z) && newObj.value.z > 0 &&
-        Number.isFinite(newObj.value.value) && newObj.value.value >= 0
+        Number.isFinite(newObj.value.value) && newObj.value.value >= 0 &&
+        objects.value.length < 10
 )
 const exceedsLimit = computed(
     () =>
@@ -300,6 +356,7 @@ const resetLayers = () => {
 }
 
 .section-title {
+  margin-top: 10px;
   font-size: 0.85rem;
   font-weight: 600;
   opacity: 0.7;
