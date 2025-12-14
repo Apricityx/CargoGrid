@@ -28,7 +28,7 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: path.join(__dirname, "assets", "logo.ico"),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -74,7 +74,7 @@ app.whenReady().then(()=>{
     })
     createWindow()
     // 如果是开发环境，则打开开发者工具
-    if (!app.isPackaged) {
-        win?.webContents.openDevTools( )
+    if (!app.isPackaged){
+        win?.webContents.openDevTools()
     }
 })

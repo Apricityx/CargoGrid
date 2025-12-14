@@ -53,12 +53,12 @@ jobs:
 
       # 打包 Electron 应用
       - name: Build the project
-        run: npm run package
+        run: npm run build
 
       # 上传产物
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: cargo-grid-win32-x64
-          path: out/cargo-grid-win32-x64
+          path: release/0.0.0/win-unpacked
           retention-days: 3
