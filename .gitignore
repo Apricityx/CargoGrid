@@ -25,3 +25,6 @@ dist-ssr
 /rust/target/*
 /rust/build.sh
 out/
+
+dist-electron/*
+dist/*
